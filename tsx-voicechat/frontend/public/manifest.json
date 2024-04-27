@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Chess Voice Chat",
+  "version": "1.0",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "action": {
+    "default_popup": "./index.html",
+    "default_icon": "./logo192.png"
+  },
+  "icons": {
+    "16": "./favicon.ico",
+    "48": "./logo192.png",
+    "128": "./logo512.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}

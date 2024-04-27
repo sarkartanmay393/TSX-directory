@@ -7,24 +7,19 @@ import {
   ButtonSpinner,
   Text,
 } from "@gluestack-ui/themed";
+import { useContext } from "react";
+import { storeContext } from "../context/storeContext";
+import { getUrlObj } from "../utils/index";
 
 const FactArea = () => {
+  const { category } = useContext(storeContext);
   const [loading, setLoading] = useState(false);
   const [currentFact, setCurrentFact] = useState(undefined);
 
-  const loadFact = async () => {
-    const url =
-      "https://numbersapi.p.rapidapi.com/6/21/date?fragment=true&json=true";
-    const options = {
-      method: "GET",
-      headers: {
-        "X-RapidAPI-Key": "ddfef432efmsh176bc99bac019dap108e74jsn1237de87d8e5",
-        "X-RapidAPI-Host": "numbersapi.p.rapidapi.com",
-      },
-    };
+  const loadFact = async (obj) => {
     setLoading(true);
     try {
-      const response = await fetch(url, options);
+      const response = await fetch(obj.url, obj.options);
       const json = await response.json();
       startTransition(() => {
         setCurrentFact(json);
@@ -37,8 +32,8 @@ const FactArea = () => {
   };
 
   useEffect(() => {
-    loadFact();
-  }, []);
+    loadFact(getUrlObj(category));
+  }, [category]);
 
   return (
     <Box style={styles.centered}>
@@ -56,7 +51,11 @@ const FactArea = () => {
         )}
       </Box>
       <Box style={styles.actions}>
-        <Button style={styles.button} title="Reload" onPress={loadFact}>
+        <Button
+          style={styles.button}
+          title="Reload"
+          onPress={() => loadFact(getUrlObj(category))}
+        >
           {loading ? (
             <ButtonSpinner />
           ) : (
