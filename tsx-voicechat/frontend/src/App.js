@@ -9,6 +9,7 @@ function App() {
   const [signalingServer, setSignalingServer] = useState();
   const [callActive, setCallActive] = useState(false);
   const [roomId, setRoomId] = useState("");
+  const candidateQueue = useRef([]);
 
   useEffect(() => {
     const server = io(BACKEND_URL);
@@ -195,6 +196,7 @@ function App() {
       .then(() =>
         signalingServer.emit("offer", {
           offer: localPeerConnection.current.localDescription,
+          roomId: roomId,
         })
       )
       .catch(handleCreateOfferError);
@@ -222,7 +224,7 @@ function App() {
     }
   };
 
-  const handleOffer = ({ offer }) => {
+  const handleOffer = async ({ offer }) => {
     console.log(`Received offer: `, offer);
     if (!offer) {
       console.error("Offer is undefined.");
@@ -231,52 +233,64 @@ function App() {
 
     const offerDescription = new RTCSessionDescription(offer);
     if (localPeerConnection.current) {
-      localPeerConnection.current
-        .setRemoteDescription(offerDescription)
-        .then(() => {
-          console.log("Remote description set successfully for offer.");
-          return localPeerConnection.current.createAnswer();
-        })
-        .then((answer) => {
-          console.log("Answer created.");
-          return localPeerConnection.current.setLocalDescription(answer);
-        })
-        .then(() => {
-          signalingServer.emit("answer", {
-            type: "answer",
-            answer: localPeerConnection.current.localDescription,
-            roomId: roomId,
-          });
-        })
-        .catch(handleCreateAnswerError);
+      try {
+        await localPeerConnection.current.setRemoteDescription(
+          offerDescription
+        );
+        console.log("Remote description set successfully for offer.");
+        processCandidateQueue();
+        console.log("Processing candidate queue...");
+        const answer = await localPeerConnection.current.createAnswer();
+        console.log("Answer created.");
+        await localPeerConnection.current.setLocalDescription(answer);
+        signalingServer.emit("answer", {
+          answer: localPeerConnection.current.localDescription,
+          roomId: roomId,
+        });
+      } catch (error) {
+        handleCreateAnswerError(error);
+      }
     }
   };
 
-  function handleAnswer({ answer, senderId }) {
+  async function handleAnswer({ answer, senderId }) {
     console.log("answer", answer, senderId);
     if (localPeerConnection.current) {
-      localPeerConnection.current
-        .setRemoteDescription(new RTCSessionDescription(answer))
-        .then(() => {
-          console.log("Remote description set successfully for answer.");
-        })
-        .catch((e) => console.error("Error setting remote description:", e));
+      try {
+        await localPeerConnection.current.setRemoteDescription(new RTCSessionDescription(answer));
+        console.log("Remote description set successfully for answer.");
+        processCandidateQueue();
+      } catch (e) {
+        console.error("Error setting remote description:", e);
+      }
     }
   }
 
   async function handleNewICECandidateMsg(data) {
     console.log("Received ICE candidate:", data);
     if (data.candidate) {
-      console.log(localPeerConnection.current.remoteDescription);
+      console.log(
+        "remoteDescription",
+        localPeerConnection.current.remoteDescription
+      );
       try {
         if (localPeerConnection.current.remoteDescription) {
           await addCandidate(data.candidate);
         } else {
-          console.error("Error adding ICE candidate: Remote description is null.");
+          console.log("Queueing ICE candidate due to no remote description.");
+          candidateQueue.push(data.candidate);
         }
       } catch (e) {
         console.error("Error adding ICE candidate:", e);
       }
+    }
+  }
+
+  // After setting remote description
+  function processCandidateQueue() {
+    while (candidateQueue.length > 0) {
+      const candidateData = candidateQueue.shift();
+      addCandidate(candidateData);
     }
   }
 
@@ -355,7 +369,7 @@ function App() {
                     placeholder="e.g. tsx123"
                     onChange={handleOnChange}
                   />
-                  <button className="s16q2" onClick={() => joinRoom(roomId)}>
+                  <button className="s16q2" onClick={handleStartCall}>
                     +
                   </button>
                 </div>

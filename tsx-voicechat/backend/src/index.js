@@ -7,13 +7,18 @@ require("dotenv").config();
 const corsOptions =
   process.env.NODE_ENVIRONMENT === "development"
     ? {}
-    : { origin: process.env.FE_URL || "https://tsx-vc-frontend.onrender.com" };
+    : {
+        origin: [
+          "https://tsx-vc-frontend.onrender.com",
+          "https://localhost:3000",
+        ],
+      };
 
 const PORT = process.env.PORT || 8080;
 const app = express();
 const server = createServer(app);
 const io = socketIo(server, {
-  cors: corsOptions,
+  cors: {},
 });
 
 app.use(cors(corsOptions));
