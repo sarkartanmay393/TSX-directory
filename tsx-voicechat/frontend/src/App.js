@@ -264,20 +264,30 @@ function App() {
     }
   }
 
-  function handleNewICECandidateMsg(data) {
+  async function handleNewICECandidateMsg(data) {
     console.log("Received ICE candidate:", data);
     if (data.candidate) {
       console.log(localPeerConnection.current.remoteDescription);
-      addCandidate(data.candidate);
+      try {
+        if (localPeerConnection.current.remoteDescription) {
+          await addCandidate(data.candidate);
+        } else {
+          console.error("Error adding ICE candidate: Remote description is null.");
+        }
+      } catch (e) {
+        console.error("Error adding ICE candidate:", e);
+      }
     }
   }
 
-  function addCandidate(candidateData) {
+  async function addCandidate(candidateData) {
     const candidate = new RTCIceCandidate(candidateData);
-    localPeerConnection.current
-      .addIceCandidate(candidate)
-      .then(() => console.log("ICE candidate added successfully."))
-      .catch((e) => console.error("Error adding ICE candidate:", e));
+    try {
+      await localPeerConnection.current.addIceCandidate(candidate);
+      console.log("ICE candidate added successfully.");
+    } catch (e) {
+      console.error("Error adding ICE candidate:", e);
+    }
   }
 
   const handleCreateOfferError = (error) => {
