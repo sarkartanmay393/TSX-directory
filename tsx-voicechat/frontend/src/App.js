@@ -6,7 +6,7 @@ import { v4 } from "uuid";
 
 function App() {
   const localPeerConnection = useRef(new RTCPeerConnection());
-  const [signalingServer, setSignalingServer] = useState();
+  const [signalingServer, setSignalingServer] = useState(null);
   const [callActive, setCallActive] = useState(false);
   const [roomId, setRoomId] = useState("");
   const candidateQueue = useRef([]);
@@ -123,17 +123,15 @@ function App() {
     });
 
     stream.getAudioTracks().forEach((track) => {
+      console.log("Track status: ", track.enabled, track.readyState);
       localPeerConnection.current.addTrack(track);
     });
 
     localPeerConnection.current.onicecandidate = handleICECandidateEvent;
     localPeerConnection.current.ontrack = handleTrackEvent;
-    localPeerConnection.current.oniceconnectionstatechange = () => {
-      console.log(
-        "ICE Connection State:",
-        localPeerConnection.current.iceConnectionState
-      );
-    };
+    localPeerConnection.current.oniceconnectionstatechange =
+      handleIceConnectionStateChange;
+    localPeerConnection.current.onnegotiationneeded = handleIceNegotiationNeed;
   };
 
   const [generatedRoomId, setGeneratedRoomId] = useState("");
@@ -176,7 +174,7 @@ function App() {
 
     // Add stream tracks to the peer connection
     stream.getAudioTracks().forEach((track) => {
-      console.log("Adding track: ", track);
+      console.log("Track status: ", track.enabled, track.readyState);
       localPeerConnection.current.addTrack(track);
     });
 
@@ -187,23 +185,37 @@ function App() {
     // Triggered on setLocalDescription call
     localPeerConnection.current.onicecandidate = handleICECandidateEvent;
     localPeerConnection.current.ontrack = handleTrackEvent;
+    localPeerConnection.current.oniceconnectionstatechange =
+      handleIceConnectionStateChange;
+    localPeerConnection.current.onnegotiationneeded = handleIceNegotiationNeed;
 
     signalingServer.emit("join", { roomId });
 
-    localPeerConnection.current
-      .createOffer()
-      .then((offer) => localPeerConnection.current.setLocalDescription(offer))
-      .then(() =>
-        signalingServer.emit("offer", {
-          offer: localPeerConnection.current.localDescription,
-          roomId: roomId,
-        })
-      )
-      .catch(handleCreateOfferError);
+    try {
+      const offer = await localPeerConnection.current.createOffer();
+      await localPeerConnection.current.setLocalDescription(offer);
+
+      signalingServer.emit("offer", {
+        offer: offer,
+        roomId: roomId,
+      });
+    } catch (err) {
+      handleCreateOfferError(err);
+    }
+  };
+
+  const handleIceNegotiationNeed = async () => {
+    try {
+      const offer = await localPeerConnection.current.createOffer();
+      await localPeerConnection.current.setLocalDescription(offer);
+      signalingServer.emit("offer", { offer: offer, roomId: roomId });
+    } catch (error) {
+      console.error("Failed to create offer", error);
+    }
   };
 
   const handleICECandidateEvent = (event) => {
-    console.log("ICE candidate event:", event);
+    console.log("Sending ICE candidate", event.candidate);
     if (event.candidate) {
       signalingServer.emit("ice-candidate", {
         roomId: roomId,
@@ -216,12 +228,19 @@ function App() {
     }
   };
 
+  const handleIceConnectionStateChange = () => {
+    console.log(
+      "ICE Connection State:",
+      localPeerConnection.current.iceConnectionState
+    );
+  };
+
   const handleTrackEvent = (event) => {
-    console.log("track", event);
+    console.log("Received track", event.streams[0]);
     const audioElement = document.querySelector("audio#audioPlay");
-    if (audioElement.srcObject !== event.streams[0]) {
-      audioElement.srcObject = event.streams[0];
-    }
+    audioElement.srcObject = event.streams[0];
+    audioElement.muted = false;
+    audioElement.volume = 1;
   };
 
   const handleOffer = async ({ offer }) => {
@@ -257,7 +276,9 @@ function App() {
     console.log("answer", answer, senderId);
     if (localPeerConnection.current) {
       try {
-        await localPeerConnection.current.setRemoteDescription(new RTCSessionDescription(answer));
+        await localPeerConnection.current.setRemoteDescription(
+          new RTCSessionDescription(answer)
+        );
         console.log("Remote description set successfully for answer.");
         processCandidateQueue();
       } catch (e) {
