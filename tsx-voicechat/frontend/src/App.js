@@ -1,13 +1,14 @@
 import React, { useEffect, useState, useRef } from "react";
 import "./App.css";
 import { io } from "socket.io-client";
+import { BACKEND_URL } from "./utils/environments";
+import { v4 } from "uuid";
 
 function App() {
-  const localPeerConnection = useRef(null);
-  const [signalingServer, setSignalingServer] = useState(null);
+  const localPeerConnection = useRef(new RTCPeerConnection());
+  const [signalingServer, setSignalingServer] = useState();
   const [callActive, setCallActive] = useState(false);
   const [roomId, setRoomId] = useState("");
-  const candidateQueue = useRef([]);
 
   useEffect(() => {
     const server = io("http://localhost:8080/");
@@ -21,6 +22,7 @@ function App() {
       server.off("offer", handleOffer);
       server.off("answer", handleAnswer);
       server.off("ice-candidate", handleNewICECandidateMsg);
+
       server.disconnect();
     };
   }, []);
@@ -55,9 +57,85 @@ function App() {
     setRoomId("");
   };
 
-  const joinRoom = async (roomId) => {
+  const checkRoomAvailability = async (roomId) => {
+    let available = false;
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/checkRoomAvailability`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ roomId: roomId }),
+      });
+
+      if (response.ok) {
+        const json = await response.json();
+        console.log(json);
+        console.log("You are allowed to go");
+      } else {
+        console.log("There must be some issue.");
+      }
+    } catch (error) {
+      console.error("Error fetching room availability:", error);
+    }
+
+    return available;
+  };
+
+  const startRoom = async () => {
+    const generatedRoomId = v4().substring(0, 6);
+    setGeneratedRoomId(generatedRoomId);
+
+    signalingServer.emit("join", { roomId: generatedRoomId });
+
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
+      audio: { echoCancellation: true },
+      video: false,
+    });
+
+    localPeerConnection.current = new RTCPeerConnection({
+      iceServers: [
+        {
+          urls: "stun:stun.relay.metered.ca:80",
+        },
+        {
+          urls: "turn:global.relay.metered.ca:80",
+          username: "aedbb4644a4ebf1034c89b21",
+          credential: "E2z+G6tDaoGjqs6c",
+        },
+        {
+          urls: "turn:global.relay.metered.ca:80?transport=tcp",
+          username: "aedbb4644a4ebf1034c89b21",
+          credential: "E2z+G6tDaoGjqs6c",
+        },
+        {
+          urls: "turn:global.relay.metered.ca:443",
+          username: "aedbb4644a4ebf1034c89b21",
+          credential: "E2z+G6tDaoGjqs6c",
+        },
+        {
+          urls: "turns:global.relay.metered.ca:443?transport=tcp",
+          username: "aedbb4644a4ebf1034c89b21",
+          credential: "E2z+G6tDaoGjqs6c",
+        },
+      ],
+    });
+
+    stream.getAudioTracks().forEach((track) => {
+      localPeerConnection.current.addTrack(track);
+    });
+
+    localPeerConnection.current.onicecandidate = handleICECandidateEvent;
+    localPeerConnection.current.ontrack = handleTrackEvent;
+  };
+
+  const [generatedRoomId, setGeneratedRoomId] = useState("");
+
+  const joinRoom = async (roomId) => {
+    if (!roomId) return;
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true },
       video: false,
     });
 
@@ -90,14 +168,15 @@ function App() {
     });
 
     // Add stream tracks to the peer connection
-    stream.getTracks().forEach((track) => {
-      localPeerConnection.current.addTrack(track, stream);
+    stream.getAudioTracks().forEach((track) => {
+      localPeerConnection.current.addTrack(track);
     });
 
     // Add audio element srcObject setup
-    const audioElement = document.querySelector("audio#audioPlay");
-    audioElement.srcObject = stream;
+    // const audioElement = document.querySelector("audio#audioPlay");
+    // audioElement.srcObject = new MediaStream();
 
+    // Triggered on setLocalDescription call
     localPeerConnection.current.onicecandidate = handleICECandidateEvent;
     localPeerConnection.current.ontrack = handleTrackEvent;
 
@@ -108,9 +187,7 @@ function App() {
       .then((offer) => localPeerConnection.current.setLocalDescription(offer))
       .then(() =>
         signalingServer.emit("offer", {
-          type: "offer",
           offer: localPeerConnection.current.localDescription,
-          roomId: roomId,
         })
       )
       .catch(handleCreateOfferError);
@@ -131,23 +208,24 @@ function App() {
   };
 
   const handleTrackEvent = (event) => {
+    console.log("track", event);
     const audioElement = document.querySelector("audio#audioPlay");
     if (audioElement.srcObject !== event.streams[0]) {
       audioElement.srcObject = event.streams[0];
     }
   };
 
-  const handleOffer = ({ offer, senderId }) => {
+  const handleOffer = ({ offer }) => {
     console.log(`Received offer: `, offer);
     if (!offer) {
       console.error("Offer is undefined.");
       return;
     }
 
-    const offerDesc = new RTCSessionDescription(offer);
+    const offerDescription = new RTCSessionDescription(offer);
     if (localPeerConnection.current) {
       localPeerConnection.current
-        .setRemoteDescription(offerDesc)
+        .setRemoteDescription(offerDescription)
         .then(() => {
           console.log("Remote description set successfully for offer.");
           return localPeerConnection.current.createAnswer();
@@ -173,9 +251,7 @@ function App() {
       localPeerConnection.current
         .setRemoteDescription(new RTCSessionDescription(answer))
         .then(() => {
-          while (candidateQueue.current.length > 0) {
-            addCandidate(candidateQueue.current.shift());
-          }
+          console.log("Remote description set successfully for answer.");
         })
         .catch((e) => console.error("Error setting remote description:", e));
     }
@@ -184,14 +260,8 @@ function App() {
   function handleNewICECandidateMsg(data) {
     console.log("Received ICE candidate:", data);
     if (data.candidate) {
-      if (
-        localPeerConnection.current &&
-        localPeerConnection.current.remoteDescription
-      ) {
-        addCandidate(data.candidate);
-      } else {
-        candidateQueue.current.push(data.candidate);
-      }
+      console.log(localPeerConnection.current.remoteDescription);
+      addCandidate(data.candidate);
     }
   }
 
@@ -211,27 +281,70 @@ function App() {
     console.error("Error creating an answer: ", error);
   };
 
+  function handleRoomAvailable(roomId) {
+    console.log(`Room ${roomId} is available.`);
+  }
+
+  function handleRoomUnavailable(roomId) {
+    console.log(`Room ${roomId} is unavailable.`);
+    setRoomId("");
+    const input = document.getElementById("roomIdInput");
+    let prev = input.placeholder;
+    input.placeholder = "Enter a different id";
+    setTimeout(() => {
+      input.placeholder = prev;
+    }, 2000);
+  }
+
+  const handleRoomIdCopy = () => {
+    navigator.clipboard.writeText(generatedRoomId);
+  };
+
   return (
     <div className="App">
       <header className="header flex column center">
         <h1>Chess VC</h1>
+
+        {generatedRoomId && (
+          <p>
+            Active room:{" "}
+            <code onClick={handleRoomIdCopy}>{generatedRoomId}</code>
+          </p>
+        )}
+
+        {callActive || generatedRoomId ? (
+          <></>
+        ) : (
+          <div>
+            <button onClick={startRoom}>Start a Room</button>
+          </div>
+        )}
+
         {callActive ? (
           <div>
             <p>Call in progress...</p>
             <button onClick={handleEndCall}>End Call</button>
           </div>
         ) : (
-          <form onSubmit={handleStartCall} className="flex column gap">
-            <label htmlFor="roomId">Enter Room ID</label>
-            <input
-              name="roomId"
-              value={roomId}
-              id="roomIdInput"
-              placeholder="e.g. tsx123"
-              onChange={handleOnChange}
-            />
-            <button type="submit">Start Call</button>
-          </form>
+          <div className="flex column center fullW">
+            {generatedRoomId ? null : (
+              <>
+                <label htmlFor="roomId">Enter Room ID</label>
+                <div className="flex center fullW gap">
+                  <input
+                    name="roomId"
+                    value={roomId}
+                    id="roomIdInput"
+                    placeholder="e.g. tsx123"
+                    onChange={handleOnChange}
+                  />
+                  <button className="s16q2" onClick={() => joinRoom(roomId)}>
+                    +
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         )}
         <audio id="audioPlay" autoPlay controls />
       </header>

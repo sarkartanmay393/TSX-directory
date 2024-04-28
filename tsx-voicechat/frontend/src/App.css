@@ -3,8 +3,9 @@
   width: 320px;
   height: fit-content;
   overflow: hidden;
+  padding: 2px;
 
-  border: 1px solid red;
+  /* border: 1px solid red; */
 }
 
 .header {
@@ -37,8 +38,32 @@ h1 {
   justify-content: center;
 }
 
+.between {
+  justify-content: space-between;
+}
+
 label {
   font-size: 1rem;
+}
+
+.flex-1 {
+  flex-basis: 1;
+}
+
+.fullW {
+  width: 100%;
+}
+
+.p90W {
+  width: 90%;
+}
+
+.p80W {
+  width: 80%;
+}
+
+.p60W {
+  width: 60%;
 }
 
 input {
@@ -53,4 +78,26 @@ input {
 
 .gap {
   gap: 0.7rem;
+}
+
+.border {
+  border: 1px solid red;
+}
+
+.s16q {
+  height: 16px;
+  width: 16px;
+}
+
+.s16q2 {
+  height: 32px;
+  width: 32px;
+}
+
+.ml {
+  margin-left: 8px;
+}
+
+.mr {
+  margin-right: 8px;
 }
