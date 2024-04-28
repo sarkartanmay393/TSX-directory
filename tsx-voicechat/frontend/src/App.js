@@ -278,7 +278,7 @@ function App() {
           await addCandidate(data.candidate);
         } else {
           console.log("Queueing ICE candidate due to no remote description.");
-          candidateQueue.push(data.candidate);
+          candidateQueue.current.push(data.candidate);
         }
       } catch (e) {
         console.error("Error adding ICE candidate:", e);
@@ -288,8 +288,8 @@ function App() {
 
   // After setting remote description
   function processCandidateQueue() {
-    while (candidateQueue.length > 0) {
-      const candidateData = candidateQueue.shift();
+    while (candidateQueue.current.length > 0) {
+      const candidateData = candidateQueue.current.shift();
       addCandidate(candidateData);
     }
   }
