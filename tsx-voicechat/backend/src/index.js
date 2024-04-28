@@ -7,7 +7,7 @@ require("dotenv").config();
 const corsOptions =
   process.env.NODE_ENVIRONMENT === "development"
     ? {}
-    : { origin: "https://tsx-vc-backend.onrender.com" };
+    : { origin: process.env.FE_URL || "https://tsx-vc-frontend.onrender.com" };
 
 const PORT = process.env.PORT || 8080;
 const app = express();
