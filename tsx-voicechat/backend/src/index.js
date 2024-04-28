@@ -2,15 +2,21 @@ const { createServer } = require("http");
 const socketIo = require("socket.io");
 const cors = require("cors");
 const express = require("express");
+require("dotenv").config();
+
+const corsOptions =
+  process.env.NODE_ENVIRONMENT === "development"
+    ? {}
+    : { origin: "https://tsx-vc-backend.onrender.com" };
 
 const PORT = process.env.PORT || 8080;
 const app = express();
 const server = createServer(app);
 const io = socketIo(server, {
-  cors: {},
+  cors: corsOptions,
 });
 
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 const roomIds = [];

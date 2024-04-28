@@ -11,7 +11,7 @@ function App() {
   const [roomId, setRoomId] = useState("");
 
   useEffect(() => {
-    const server = io("http://localhost:8080/");
+    const server = io(BACKEND_URL);
     setSignalingServer(server);
 
     server.on("offer", handleOffer);
@@ -127,6 +127,12 @@ function App() {
 
     localPeerConnection.current.onicecandidate = handleICECandidateEvent;
     localPeerConnection.current.ontrack = handleTrackEvent;
+    localPeerConnection.current.oniceconnectionstatechange = () => {
+      console.log(
+        "ICE Connection State:",
+        localPeerConnection.current.iceConnectionState
+      );
+    };
   };
 
   const [generatedRoomId, setGeneratedRoomId] = useState("");
@@ -169,6 +175,7 @@ function App() {
 
     // Add stream tracks to the peer connection
     stream.getAudioTracks().forEach((track) => {
+      console.log("Adding track: ", track);
       localPeerConnection.current.addTrack(track);
     });
 
