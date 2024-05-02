@@ -59,10 +59,10 @@ io.on("connection", (socket) => {
 
   socket.on("ice-candidate", (data) => {
     console.log("ICE-Candidate: ", data.roomId);
+
     if (data.candidate) {
       socket.to(data.roomId).emit("ice-candidate", {
         candidate: data.candidate,
-        senderId: socket.id,
       });
     }
   });
@@ -74,16 +74,20 @@ io.on("connection", (socket) => {
       return;
     }
     socket.join(data.roomId);
+    socket.to(data.roomId).emit("joined", { roomId: data.roomId, userId: socket.id });
     console.log(`User ${socket.id} joined room ${data.roomId}`);
-    // socket
-    //   .to(data.roomId)
-    //   .emit("join", { roomId: data.roomId, userId: socket.id });
+  });
+
+  socket.on("stop", (data) => {
+    console.log(`User ${socket.id} stopped room ${data.roomId}`);
+    socket
+      .to(data.roomId)
+      .emit("stop", { roomId: data.roomId, userId: socket.id });
+    socket.leave(data.roomId);
   });
 
   socket.on("disconnect", (reason) => {
     console.log("User disconnected", socket.id, "Reason:", reason);
-    // Notify other users in the same room
-    // socket.broadcast.emit("userDisconnected", { userId: socket.id, reason });
   });
 
   socket.on("error", (error) => {
